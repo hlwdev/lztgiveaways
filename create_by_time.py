@@ -131,7 +131,7 @@ async def get_other(message: types.Message, state: FSMContext):
 
 @router_two.callback_query(F.data.in_({'cbtapprove_', 'cbtreject_'}))
 # Создание розыгрыша и его повторение
-async def da(callback_query: types.CallbackQuery, state: FSMContext):
+async def da(message: types.Message, callback_query: types.CallbackQuery, state: FSMContext):
     # Получаем данные для розыгрыша
     action = callback_query.data
     user_data = await state.get_data()
@@ -160,7 +160,7 @@ async def da(callback_query: types.CallbackQuery, state: FSMContext):
                 thread_id = response.json()["thread"]["links"]["permalink"]
                 print(f"Розыгрыш {thread_id} успешно создан!")
                 await callback_query.message.edit_text(f"Розыгрыш успешно создан\n{thread_id}")
-                await schedule_repeating_da(admin_ids)          
+                await schedule_repeating_da(message, admin_ids, state)          
         except Exception as e:
             await callback_query.message.edit_text(f"Произошла ошибка: {e}")
     elif action=='cbtreject_':
