@@ -167,14 +167,14 @@ async def da(message: types.Message, callback_query: types.CallbackQuery, state:
         await callback_query.message.edit_text("Создание розыгрыша отменено")
 
 # Повторяющаяся задача для выполнения команды через X дней
-async def repeat_da_command(message, admin_ids, state: FSMContext):
+async def repeat_da_command(message, admin_ids, callback_query: types.CallbackQuery, state: FSMContext):
     try:
         user_data = await state.get_data()
         interval_days = user_data.get('interval_days')
         user_id = message.from_user.id
         while True:
             await asyncio.sleep(interval_days * 86400)  # Интервал в днях
-            await da(message, admin_ids, user_id)  # Выполнение команды для пользователя
+            await da(message, admin_ids, callback_query, user_id)  # Выполнение команды для пользователя
     except asyncio.CancelledError:
         await message.reply("Повторение команды остановлено.")
         return
