@@ -35,3 +35,8 @@ def masskey():
     keyboard.button(text="✅ Одобрить", callback_data="massapprove_")
     keyboard.button(text="❌ Отмена", callback_data="massreject_")
     return keyboard.as_markup()
+
+def updkey():
+    keyboard = InlineKeyboardBuilder()
+    keyboard.button(text="🔄 Обновить", callback_data="update")
+    return keyboard.as_markup()
