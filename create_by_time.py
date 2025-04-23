@@ -65,6 +65,10 @@ async def get_other(message: types.Message, state: FSMContext):
     try:
         other = message.text  # Получаем текст от пользователя
         parts = [part.strip() for part in other.split(",")]
+        if len(parts) !=3:
+            await message.reply("Нужно ввести ровно 3 значения через запятую: сумма, срок, тип срока\nПример: 555, 2, hours")
+            await state.clear()
+            return
         price, dateX, dateY = parts  # Распаковываем части
         if int(price)<500:
             await message.reply("Сумма розыгрыша не может быть меньше 500₽\nПопробуйте снова")
@@ -123,6 +127,7 @@ async def get_other(message: types.Message, state: FSMContext):
         await state.clear()
     except ValueError as val_err:
         await message.reply(f"Ошибка при обработке данных: {val_err}")
+        print(val_err)
         await state.clear()
     except Exception as e:
         await message.reply(f"Произошла ошибка: {str(e)}")
@@ -131,7 +136,7 @@ async def get_other(message: types.Message, state: FSMContext):
 
 @router_two.callback_query(F.data.in_({'cbtapprove_', 'cbtreject_'}))
 # Создание розыгрыша и его повторение
-async def da(message: types.Message, callback_query: types.CallbackQuery, state: FSMContext):
+async def da(callback_query: types.CallbackQuery, state: FSMContext):
     # Получаем данные для розыгрыша
     action = callback_query.data
     user_data = await state.get_data()
@@ -160,34 +165,60 @@ async def da(message: types.Message, callback_query: types.CallbackQuery, state:
                 thread_id = response.json()["thread"]["links"]["permalink"]
                 print(f"Розыгрыш {thread_id} успешно создан!")
                 await callback_query.message.edit_text(f"Розыгрыш успешно создан\n{thread_id}")
-                await schedule_repeating_da(message, admin_ids, state)          
+                await schedule_repeating_da(callback_query.message, state)          
         except Exception as e:
             await callback_query.message.edit_text(f"Произошла ошибка: {e}")
     elif action=='cbtreject_':
         await callback_query.message.edit_text("Создание розыгрыша отменено")
 
 # Повторяющаяся задача для выполнения команды через X дней
-async def repeat_da_command(message, admin_ids, callback_query: types.CallbackQuery, state: FSMContext):
+async def repeat_da_command(message: types.Message, state: FSMContext):
     try:
         user_data = await state.get_data()
         interval_days = user_data.get('interval_days')
         user_id = message.from_user.id
         while True:
-            await asyncio.sleep(interval_days * 86400)  # Интервал в днях
-            await da(message, admin_ids, callback_query, user_id)  # Выполнение команды для пользователя
+            await asyncio.sleep(interval_days)  # Интервал в днях
+            try:
+                user_data = await state.get_data()
+                title = user_data.get('title')
+                body = user_data.get('body')
+                price = user_data.get('price')
+                dateX = user_data.get('dateX')
+                dateY = user_data.get('dateY')
+                tags = user_data.get('tags')
+                price = int(price)
+                like_count = max(200, min(math.floor(price/10), 4000))
+                await asyncio.sleep(2)
+                response = forum.threads.contests.money.create_by_time(
+                    post_body=body, prize_data_money=price,
+                    count_winners=1, length_value=dateX, length_option=dateY,
+                    require_like_count=1, require_total_like_count=like_count, secret_answer=secret,
+                    tags=tags, title=title)
+                response_data = response.json()
+                if 'errors' in response_data:
+                    error = '\n'.join(response_data['errors'])
+                    await message.answer(f'Произошла ошибка:\n{error}')
+                else:
+                    thread_id = response.json()["thread"]["links"]["permalink"]
+                    await message.answer(f"Розыгрыш успешно повторен!\n{thread_id}")         
+            except Exception as e:
+                await message.answer(f"Произошла ошибка: {e}")
+                print(e)
     except asyncio.CancelledError:
         await message.reply("Повторение команды остановлено.")
         return
     except Exception as e:
         await message.reply(f"Произошла ошибка: {e}")
 
+
 # Планирование повторяющейся задачи
-async def schedule_repeating_da(message: types.Message, admin_ids, state: FSMContext):
+async def schedule_repeating_da(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     user_data = await state.get_data()
     interval_days = user_data.get('interval_days')
     # Создаем новую повторяющуюся задачу
-    task = asyncio.create_task(repeat_da_command(message, admin_ids))
+    task = asyncio.create_task(repeat_da_command(message, state))
     tasks[user_id] = task
     await message.reply(f"Команда будет повторяться каждые {interval_days} дня(ей).\nОтменить задачу - /cancel")
 
@@ -197,19 +228,16 @@ async def net(message: types.Message):
 
 # Отмена повторяющейся задачи
 @router_two.message(Command('cancel'))
-async def cancel_repeating_da(message: types.Message):
+async def cancel_everything(message: types.Message, state: FSMContext):
+    await state.clear()
     user_id = message.from_user.id
-
+    # 1. Отменяем задачу, если есть
     if user_id in tasks:
-        task = tasks[user_id]
-        print(task)
-        if not task.done():
-            task.cancel()  # Отменяем задачу
-            await message.reply("Повторение команды успешно остановлено.")
-        else:
-            await message.reply("Задача уже завершена.")
+        tasks[user_id].cancel()
+        del tasks[user_id]
+        await message.answer("Все операции отменены")
     else:
-        await message.reply("Нет активных задач для остановки.")
+        await message.answer("Нет активных задач")
 
 @router_two.message(Command('active'))
 async def cancel_repeating_da(message: types.Message):
