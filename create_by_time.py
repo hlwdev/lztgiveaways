@@ -178,7 +178,7 @@ async def repeat_da_command(message: types.Message, state: FSMContext):
         interval_days = user_data.get('interval_days')
         user_id = message.from_user.id
         while True:
-            await asyncio.sleep(interval_days)  # Интервал в днях
+            await asyncio.sleep(interval_days*86400)  # Интервал в днях
             try:
                 user_data = await state.get_data()
                 title = user_data.get('title')
